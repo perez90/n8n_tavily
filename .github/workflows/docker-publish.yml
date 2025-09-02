@@ -34,4 +34,5 @@ jobs:
 
       - name: Inspect pushed image (list /home/node/.n8n/custom)
         run: |
-          docker run --rm docker.io/abarbero90/n8n-tavily:latest sh -c "echo '--- ls -la /home/node/.n8n/custom ---'; ls -la /home/node/.n8n/custom || true; echo '--- ls -la /home/node/.n8n/custom/node_modules ---'; ls -la /home/node/.n8n/custom/node_modules || true; echo '--- grep tavily ---'; ls -la /home/node/.n8n/custom/node_modules | grep tavily || true; echo '--- package.json ---'; cat /home/node/.n8n/custom/package.json 2>/dev/null || echo 'no package.json'"
+          echo "Pulled image and listing inside with /bin/sh (sobreescribiendo entrypoint)"
+          docker run --rm --entrypoint /bin/sh docker.io/abarbero90/n8n-tavily:latest -c "echo '--- ls -la /home/node/.n8n/custom ---'; ls -la /home/node/.n8n/custom || true; echo '--- ls -la /home/node/.n8n/custom/node_modules ---'; ls -la /home/node/.n8n/custom/node_modules || true; echo '--- grep tavily ---'; ls -la /home/node/.n8n/custom/node_modules 2>/dev/null | grep tavily || echo 'no tavily encontrado'; echo '--- package.json ---'; cat /home/node/.n8n/custom/package.json 2>/dev/null || echo 'no package.json'"
