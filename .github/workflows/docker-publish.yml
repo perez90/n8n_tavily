@@ -1,4 +1,4 @@
-name: Build and push Docker image
+name: Build, push and inspect image
 
 on:
   push:
@@ -7,6 +7,9 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,9 +22,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           push: true
           tags: docker.io/abarbero90/n8n-tavily:latest
           file: Dockerfile
+
+      - name: Inspect pushed image (list /home/node/.n8n/custom)
+        run: |
+          echo "Pulling image to inspect..."
+          docker pull docker.io/abarbero90/n8n-tavily:latest
+          echo "Listing /home/node/.n8n/custom inside container"
+          docker run --rm docker.io/abarbero90/n8n-tavily:latest sh -c "echo '--- ls -la /home/node/.n8n/custom ---'; ls -la /home/node/.n8n/custom || true; echo '--- ls -la /home/node/.n8n/custom/node_modules ---'; ls -la /home/node/.n8n/custom/node_modules || true; echo '--- grep @tavily ---'; ls -la /home/node/.n8n/custom/node_modules | grep tavily || true; echo '--- package.json ---'; cat /home/node/.n8n/custom/package.json 2>/dev/null || echo 'no package.json'"
