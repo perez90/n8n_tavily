@@ -1,31 +1,51 @@
+# Dockerfile optimizado para Koyeb
 FROM n8nio/n8n:latest
 
+# Koyeb puede ejecutar como root, así que simplificamos
 USER root
 
-# --- PASO 1: Descargar Tavily en una "Caja Fuerte" temporal ---
-# Lo instalamos en /cache para que el volumen de Koyeb no lo toque/borre
-WORKDIR /cache
-RUN npm install @tavily/n8n-nodes-tavily
+# Crear estructura de directorios con permisos adecuados
+RUN mkdir -p /data/.n8n/custom && \
+    mkdir -p /home/node/.n8n/custom && \
+    chown -R node:node /data && \
+    chown -R node:node /home/node/.n8n && \
+    chmod -R 755 /data && \
+    chmod -R 755 /home/node/.n8n
 
-# --- PASO 2: Arreglar el error de Proxy (X-Forwarded-For) ---
-# Esto elimina los logs rojos de validación de Koyeb
-ENV N8N_PROXY_HOPS=1
-
-# --- PASO 3: Crear el Script de Inyección ---
-# Creamos un archivo start.sh que se ejecutará al iniciar.
-# Este script copia el nodo desde la "Caja Fuerte" (/cache) a la carpeta real (.n8n/nodes)
-RUN echo '#!/bin/sh' > /start.sh && \
-    echo 'echo ">>> INICIANDO INYECCION DE TAVILY..."' >> /start.sh && \
-    # Creamos la carpeta de nodos si no existe
-    echo 'mkdir -p /home/node/.n8n/nodes' >> /start.sh && \
-    # Copiamos el nodo (usamos -u para copiar solo si es nuevo/modificado)
-    echo 'cp -ru /cache/node_modules/@tavily /home/node/.n8n/nodes/' >> /start.sh && \
-    echo 'echo ">>> TAVILY INYECTADO CORRECTAMENTE"' >> /start.sh && \
-    # Ejecutamos el arranque normal de n8n
-    echo 'exec /docker-entrypoint.sh' >> /start.sh && \
-    chmod +x /start.sh
-
-# --- PASO 4: Configurar el arranque ---
+# Cambiar a usuario node para npm
 USER node
-# Le decimos a Docker que use nuestro script en lugar del normal
-ENTRYPOINT ["/start.sh"]
+WORKDIR /home/node/.n8n/custom
+
+# Instalar Tavily con múltiples intentos
+RUN npm init -y --scope=custom && \
+    (npm install @tavily/n8n-nodes-tavily --legacy-peer-deps || \
+     npm install @tavily/n8n-nodes-tavily --force || \
+     npm install @tavily/n8n-nodes-tavily) && \
+    echo "✅ Tavily instalado correctamente"
+
+# Verificación detallada
+RUN echo "=== Verificación de instalación ===" && \
+    test -d node_modules/@tavily && echo "✅ Directorio @tavily existe" || echo "❌ NO existe @tavily" && \
+    test -f node_modules/@tavily/n8n-nodes-tavily/package.json && echo "✅ package.json de Tavily encontrado" || echo "❌ package.json NO encontrado" && \
+    ls -la node_modules/@tavily/n8n-nodes-tavily/ 2>/dev/null | head -20 || echo "No se puede listar contenido" && \
+    echo "=== Contenido de package.json local ===" && \
+    cat package.json
+
+# Variables de entorno necesarias
+ENV N8N_CUSTOM_EXTENSIONS="/home/node/.n8n/custom"
+ENV NODE_FUNCTION_ALLOW_EXTERNAL="*"
+ENV N8N_DIAGNOSTICS_ENABLED="false"
+
+# Configuración para Koyeb (opcional pero recomendado)
+ENV N8N_HOST="0.0.0.0"
+ENV N8N_PORT="8080"
+ENV N8N_PROTOCOL="https"
+ENV WEBHOOK_URL="https://tu-app.koyeb.app/"
+
+WORKDIR /home/node
+
+# Puerto para Koyeb
+EXPOSE 8080
+
+# Comando de inicio
+CMD ["n8n", "start"]
