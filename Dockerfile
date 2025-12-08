@@ -2,16 +2,27 @@ FROM n8nio/n8n:latest
 
 USER root
 
-# 1. SOLUCIÓN AL "NODO NO RECONOCIDO":
-# En lugar de instalarlo global (-g), nos metemos en la carpeta donde está instalado n8n
-# e instalamos Tavily como si fuera una dependencia nativa de n8n.
-WORKDIR /usr/local/lib/node_modules/n8n
+# --- PASO 1: Instalar en una zona neutral ---
+# Vamos a una carpeta temporal para que npm no detecte los "workspaces" de n8n
+WORKDIR /tmp
+# Instalamos el paquete aquí
 RUN npm install @tavily/n8n-nodes-tavily
 
-# 2. SOLUCIÓN AL ERROR DE "X-Forwarded-For":
-# Esto elimina el spam en los logs y arregla problemas de conexión en Koyeb.
+# --- PASO 2: Inyección Manual ---
+# Creamos la carpeta de destino dentro de n8n
+RUN mkdir -p /usr/local/lib/node_modules/n8n/node_modules/@tavily
+
+# Copiamos lo que instalamos en /tmp directamente al corazón de n8n
+# Esto evita el error de "workspace" y el error de "volumen oculto"
+RUN cp -r /tmp/node_modules/@tavily/n8n-nodes-tavily /usr/local/lib/node_modules/n8n/node_modules/@tavily/
+
+# --- PASO 3: Configuración Final ---
+# Limpiamos la basura temporal
+RUN rm -rf /tmp/node_modules
+
+# Solución para el error rojo de "X-Forwarded-For"
 ENV N8N_PROXY_HOPS=1
 
-# Regresamos a la configuración normal de usuario
+# Regresamos al usuario normal y a su carpeta
 WORKDIR /home/node
 USER node
