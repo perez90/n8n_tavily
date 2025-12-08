@@ -1,28 +1,29 @@
-# Dockerfile - n8n con Tavily (Actualizado y seguro para Volúmenes)
+# Usamos la última versión estable de n8n
 FROM n8nio/n8n:latest
 
 USER root
 
-# 1. Instalar herramientas de compilación básicas (por si el nodo las requiere al compilar)
-# La imagen oficial está basada en Alpine, por lo que usamos apk
+# 1. Instalar dependencias de compilación (necesarias para algunos nodos)
 RUN apk add --update --no-cache python3 make g++
 
-# 2. Crear una carpeta FUERA de ~/.n8n para instalar los nodos.
-# Esto evita que se borren cuando Koyeb monte tu volumen de datos persistentes.
-WORKDIR /opt/n8n/custom
+# 2. Crear una carpeta segura FUERA de /home/node/.n8n
+# Usamos /opt/n8n-custom para que el volumen de datos no la oculte
+WORKDIR /opt/n8n-custom
 
-# 3. Inicializar npm e instalar el nodo
-# NOTA: El paquete público estándar es 'n8n-nodes-tavily'.
-# Si tu paquete específico era '@tavily/n8n-nodes-tavily', cambia el nombre abajo.
+# 3. Iniciar un package.json e instalar Tavily
+# Usamos 'n8n-nodes-tavily' que es el paquete estándar actual
 RUN npm init -y && \
-    npm install n8n-nodes-tavily --legacy-peer-deps --loglevel verbose
+    npm install n8n-nodes-tavily --legacy-peer-deps --production
 
-# 4. Configurar la variable de entorno para que n8n cargue el nodo desde aquí
-# Apuntamos directamente a la carpeta del paquete instalado
-ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n/custom/node_modules/n8n-nodes-tavily
+# 4. Configurar la variable de entorno para que n8n sepa dónde buscar el nodo
+# Esto es CRUCIAL: le decimos a n8n que cargue el nodo desde esta ruta externa
+ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n-custom/node_modules/n8n-nodes-tavily
 
-# Limpieza y permisos
+# 5. Permisos y volver al usuario node
+RUN chown -R node:node /opt/n8n-custom
 USER node
+
+# Volver al directorio de trabajo original
 WORKDIR /home/node
 
-# El ENTRYPOINT original de n8n se mantiene intacto automáticamente
+# El ENTRYPOINT original se mantiene
