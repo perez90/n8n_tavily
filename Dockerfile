@@ -1,30 +1,28 @@
+# Dockerfile - n8n con Tavily (Actualizado y seguro para Volúmenes)
 FROM n8nio/n8n:latest
 
 USER root
 
-# 1. INSTALACIÓN LIMPIA EN ZONA TEMPORAL
-# Usamos /tmp para que npm no se queje de permisos ni workspaces
-WORKDIR /tmp
-RUN npm install @tavily/n8n-nodes-tavily
+# 1. Instalar herramientas de compilación básicas (por si el nodo las requiere al compilar)
+# La imagen oficial está basada en Alpine, por lo que usamos apk
+RUN apk add --update --no-cache python3 make g++
 
-# 2. TRASPLANTE AL NÚCLEO DE N8N
-# Creamos la carpeta de destino dentro de las librerías oficiales de n8n
-RUN mkdir -p /usr/local/lib/node_modules/n8n/node_modules/@tavily
+# 2. Crear una carpeta FUERA de ~/.n8n para instalar los nodos.
+# Esto evita que se borren cuando Koyeb monte tu volumen de datos persistentes.
+WORKDIR /opt/n8n/custom
 
-# Movemos físicamente los archivos. 
-# Al ponerlo aquí, n8n lo carga como si fuera un nodo nativo del sistema.
-RUN cp -r node_modules/@tavily/n8n-nodes-tavily /usr/local/lib/node_modules/n8n/node_modules/@tavily/
+# 3. Inicializar npm e instalar el nodo
+# NOTA: El paquete público estándar es 'n8n-nodes-tavily'.
+# Si tu paquete específico era '@tavily/n8n-nodes-tavily', cambia el nombre abajo.
+RUN npm init -y && \
+    npm install n8n-nodes-tavily --legacy-peer-deps --loglevel verbose
 
-# 3. LIMPIEZA Y PERMISOS (CRÍTICO)
-# Borramos la basura temporal
-RUN rm -rf /tmp/*
-# Le regalamos la propiedad de los archivos al usuario node para que pueda leerlos
-RUN chown -R node:node /usr/local/lib/node_modules/n8n/node_modules/@tavily
+# 4. Configurar la variable de entorno para que n8n cargue el nodo desde aquí
+# Apuntamos directamente a la carpeta del paquete instalado
+ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n/custom/node_modules/n8n-nodes-tavily
 
-# 4. AJUSTES DE RED
-# Esto evita los errores rojos de "X-Forwarded-For"
-ENV N8N_PROXY_HOPS=1
-
-# Volvemos al usuario estándar
-WORKDIR /home/node
+# Limpieza y permisos
 USER node
+WORKDIR /home/node
+
+# El ENTRYPOINT original de n8n se mantiene intacto automáticamente
