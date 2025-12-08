@@ -1,29 +1,30 @@
-# Usamos la última versión estable de n8n
 FROM n8nio/n8n:latest
 
 USER root
 
-# 1. Instalar dependencias de compilación (necesarias para algunos nodos)
+# 1. Instalar herramientas necesarias
 RUN apk add --update --no-cache python3 make g++
 
-# 2. Crear una carpeta segura FUERA de /home/node/.n8n
-# Usamos /opt/n8n-custom para que el volumen de datos no la oculte
-WORKDIR /opt/n8n-custom
-
-# 3. Iniciar un package.json e instalar Tavily
-# Usamos 'n8n-nodes-tavily' que es el paquete estándar actual
+# 2. Instalar el nodo en una carpeta de "Respaldo" (fuera de la zona de peligro)
+WORKDIR /fallback_nodes
 RUN npm init -y && \
     npm install n8n-nodes-tavily --legacy-peer-deps --production
 
-# 4. Configurar la variable de entorno para que n8n sepa dónde buscar el nodo
-# Esto es CRUCIAL: le decimos a n8n que cargue el nodo desde esta ruta externa
-ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n-custom/node_modules/n8n-nodes-tavily
+# 3. Crear script de arranque inteligente
+# Este script copiará el nodo a tu carpeta de datos cada vez que inicies
+RUN echo '#!/bin/sh' > /docker-entrypoint-custom.sh && \
+    echo 'echo "🔄 Iniciando carga de nodos personalizados..."' >> /docker-entrypoint-custom.sh && \
+    echo 'mkdir -p /home/node/.n8n/custom/node_modules' >> /docker-entrypoint-custom.sh && \
+    echo 'cp -r /fallback_nodes/node_modules/* /home/node/.n8n/custom/node_modules/' >> /docker-entrypoint-custom.sh && \
+    echo 'chown -R node:node /home/node/.n8n/custom' >> /docker-entrypoint-custom.sh && \
+    echo 'echo "✅ Nodos cargados. Iniciando n8n..."' >> /docker-entrypoint-custom.sh && \
+    echo 'exec /docker-entrypoint.sh "$@"' >> /docker-entrypoint-custom.sh && \
+    chmod +x /docker-entrypoint-custom.sh
 
-# 5. Permisos y volver al usuario node
-RUN chown -R node:node /opt/n8n-custom
 USER node
 
-# Volver al directorio de trabajo original
+# 4. Forzamos n8n a mirar en la carpeta estándar (por si acaso)
 WORKDIR /home/node
 
-# El ENTRYPOINT original se mantiene
+# Usamos nuestro script como lanzador
+ENTRYPOINT ["/docker-entrypoint-custom.sh"]
